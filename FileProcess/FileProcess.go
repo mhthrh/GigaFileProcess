@@ -2,7 +2,9 @@ package FileProcess
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/mhthrh/GigaFileProcess/Rabbit"
 	"github.com/mhthrh/GigaFileProcess/Validation"
 	"strings"
 )
@@ -30,14 +32,17 @@ func DoProcess(lines []string) error {
 		damagedLines := make(chan []string)
 		ctx, can := context.WithCancel(context.Background())
 		cancels = append(cancels, can)
-
+		mq, err := Rabbit.New("")
+		if err != nil {
+			return fmt.Errorf("canot connet to rabbitMq server,%v", err)
+		}
 		switch length := len(lines[i-1 : j]); {
 		case length <= j:
-			go process(lines, ctx, &damagedLines)
+			go process(lines, ctx, &damagedLines, mq)
 			channels = append(channels, damagedLines)
 			goto exitFor
 		default:
-			go process(lines[i-1:j], ctx, &damagedLines)
+			go process(lines[i-1:j], ctx, &damagedLines, mq)
 			channels = append(channels, damagedLines)
 			i = j
 			j += j
@@ -53,11 +58,12 @@ exitFor:
 	return nil
 }
 
-func process(lines []string, ctx context.Context, dam *chan []string) {
+func process(lines []string, ctx context.Context, dam *chan []string, mq *Rabbit.Mq) {
 	var damaged []string
 	var obj []MyStruct
 	line := make(chan string)
 	finish := make(chan struct{})
+	_ = mq.DeclareQueue(mq.ID.String())
 	go func() {
 		for _, l := range lines {
 			line <- l
@@ -109,6 +115,10 @@ func process(lines []string, ctx context.Context, dam *chan []string) {
 			return
 		case <-finish:
 			*dam <- damaged
+			for _, o := range obj {
+				byt, _ := json.Marshal(o)
+				mq.Produce(mq.ID.String(), string(byt))
+			}
 		}
 	}
 
