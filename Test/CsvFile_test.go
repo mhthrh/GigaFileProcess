@@ -1,0 +1,46 @@
+package Test
+
+import (
+	"fmt"
+	"github.com/mhthrh/GigaFileProcess/CsvFile"
+	"github.com/mhthrh/GigaFileProcess/FileProcess"
+	"github.com/mhthrh/GigaFileProcess/Utils"
+	"github.com/stretchr/testify/require"
+	"os"
+	"strings"
+	"testing"
+)
+
+func TestFile(t *testing.T) {
+	writeFile(t)
+	readFile(t)
+}
+func writeFile(t *testing.T) {
+	file, err := os.Create(FileName)
+	require.NoError(t, err)
+	require.NotEmpty(t, file)
+	var sb strings.Builder
+
+	for i := 0; i < Count; i++ {
+		sb.WriteString(fmt.Sprintf("%d,%s,%s,%s,%s,%d\n", i, Utils.RandomString(10), Utils.RandomString(10), Utils.RandomString(10), Utils.RandomString(10), Utils.RandomInt(2, 10)))
+	}
+
+	_, err = file.WriteString(sb.String())
+	require.NoError(t, err)
+
+}
+func readFile(t *testing.T) {
+	csv, err := CsvFile.NewFile("./", FileName)
+	require.NoError(t, err)
+	require.NotEmpty(t, csv)
+
+	FileArray, err = csv.Read()
+	require.NoError(t, err)
+	require.Equal(t, len(FileArray), Count)
+	err = csv.Close()
+	require.NoError(t, err)
+}
+func TestDoProcess(t *testing.T) {
+	err := FileProcess.DoProcess(FileArray)
+	require.NoError(t, err)
+}
