@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mhthrh/GigaFileProcess/Entity"
 	"github.com/mhthrh/GigaFileProcess/Rabbit"
 	"github.com/mhthrh/GigaFileProcess/Validation"
 	"strings"
@@ -17,14 +18,6 @@ var (
 	i        = 1
 	j        = packages
 )
-
-type MyStruct struct {
-	ID              int64
-	FullName        string
-	SourceIBAN      string
-	DestinationIBAN string
-	Amount          float32
-}
 
 func DoProcess(lines []string) error {
 	var damegedList []string
@@ -60,7 +53,7 @@ exitFor:
 
 func process(lines []string, ctx context.Context, dam *chan []string, mq *Rabbit.Mq) {
 	var damaged []string
-	var obj []MyStruct
+	var obj []Entity.FileStructure
 	line := make(chan string)
 	finish := make(chan struct{})
 	_ = mq.DeclareQueue(mq.ID.String())
@@ -104,7 +97,7 @@ func process(lines []string, ctx context.Context, dam *chan []string, mq *Rabbit
 				damaged = append(damaged, fmt.Sprintf("%s#%s", l, err.Error()))
 				continue
 			}
-			obj = append(obj, MyStruct{
+			obj = append(obj, Entity.FileStructure{
 				ID:              newId,
 				FullName:        values[1],
 				SourceIBAN:      values[2],

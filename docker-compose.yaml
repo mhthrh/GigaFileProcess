@@ -3,8 +3,16 @@ version: "3"
 services:
   message-broker:
     image: rabbitmq:3-management-alpine
-    container_name: rabbitMq
+    container_name: rabbit
     ports:
       - "5672:5672"
       - "15672:15672"
     restart: always
+  oracle-db:
+    image: oracleinanutshell/oracle-xe-11g:latest
+    container_name: oracle
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "1521:1521"
+      - "22:22"

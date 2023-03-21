@@ -1,3 +1,5 @@
+dbConnection= godror://mohsen:mohsen@localhost:1521/mohsen
+
 test:
 	go test -v -cover ./Test/...
 
