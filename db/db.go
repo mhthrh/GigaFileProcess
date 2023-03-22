@@ -18,6 +18,9 @@ type Database struct {
 	db *sql.DB
 }
 
+func New(d *sql.DB) *Database {
+	return &Database{db: d}
+}
 func (d *Database) Insert(ctx context.Context, trans []Entity.FileStructure) error {
 	makePackages(trans)
 	if len(packages) < 1 {
