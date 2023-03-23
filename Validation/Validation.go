@@ -59,3 +59,16 @@ func ValidateIban(s string) error {
 	}
 	return nil
 }
+
+func Priority(p int) error {
+	if p > 100 || p <= 25 {
+		return fmt.Errorf("periority not in range")
+	}
+	return nil
+}
+func Count(p int) error {
+	if p > 100_000_000 || p <= 0 {
+		return fmt.Errorf("file count out of range")
+	}
+	return nil
+}

@@ -19,6 +19,13 @@ var (
 	j        = packages
 )
 
+type obj struct {
+	mq           *Rabbit.Mq
+	ctx          context.Context
+	damagedLines chan []string
+	lines        []string
+}
+
 func DoProcess(lines []string) error {
 	var damegedList []string
 	for {
