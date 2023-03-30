@@ -10,7 +10,8 @@ func RunSync() http.Handler {
 	router := gin.New()
 	router.Use(gin.Recovery())
 
-	router.POST("/server/run", Server.Run)
+	router.POST("/gateway/file", Server.Run)
+	router.POST("/gateway/investigate", Server.Run)
 	router.GET("/version", Server.Version)
 	router.NoRoute(Server.NotFound)
 

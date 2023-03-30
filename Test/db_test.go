@@ -2,14 +2,14 @@ package Test
 
 import (
 	"context"
-	"github.com/mhthrh/GigaFileProcess/Entity"
 	"github.com/mhthrh/GigaFileProcess/db"
+	"github.com/mhthrh/GigaFileProcess/entity"
 	"testing"
 )
 
 func TestDb(t *testing.T) {
-	var trans []Entity.FileStructure
-	trans = append(trans, Entity.FileStructure{
+	var trans []entity.FileStructure
+	trans = append(trans, entity.FileStructure{
 		ID:              0,
 		FullName:        "",
 		SourceIBAN:      "",

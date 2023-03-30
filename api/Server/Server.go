@@ -1,17 +1,21 @@
 package Server
 
 import (
-	"fmt"
+	"encoding/json"
 	"github.com/gin-gonic/gin"
-	"github.com/mhthrh/GigaFileProcess/Entity"
-	"github.com/mhthrh/GigaFileProcess/Rabbit"
+	"github.com/mhthrh/GigaFileProcess/FileProcess"
+	"github.com/mhthrh/GigaFileProcess/Utils/CryptoUtil"
 	"github.com/mhthrh/GigaFileProcess/Validation"
+	"github.com/mhthrh/GigaFileProcess/entity"
+	File "github.com/mhthrh/GigaFileProcess/file"
+	"github.com/mhthrh/GigaFileProcess/ftp"
+	Redis "github.com/mhthrh/GigaFileProcess/redis"
 	"net/http"
 	"time"
 )
 
 func Run(ctx *gin.Context) {
-	var request Entity.RunRequest
+	var request entity.FileRequest
 	if err := ctx.BindJSON(&request); err != nil {
 		ctx.JSON(http.StatusBadRequest, "cannot pars request object")
 		ctx.Abort()
@@ -27,28 +31,64 @@ func Run(ctx *gin.Context) {
 		ctx.Abort()
 		return
 	}
-	if request.FileName == "" {
+	if request.Name == "" {
 		ctx.JSON(http.StatusBadRequest, "file name be empty")
 		ctx.Abort()
 		return
 	}
-	count := request.Count / request.Priority
-	rabbit, err := Rabbit.New("")
-	if err != nil {
-		if request.FileName == "" {
-			ctx.JSON(http.StatusInternalServerError, "cannot connect to rabbit MQ")
-			ctx.Abort()
-			return
-		}
-	}
-	for i := 0; i < count; i++ {
-		if err := rabbit.DeclareQueue(fmt.Sprintf("%s-%d", request.ID.String(), i)); err != nil {
-			ctx.JSON(http.StatusInternalServerError, "cannot create queue rabbit MQ")
-			ctx.Abort()
-			return
-		}
-	}
 
+	client, err := ftp.New("", "", "", 0)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, "ftp calling error")
+		ctx.Abort()
+		return
+	}
+	err = client.Download("", "", "")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, "cannot find file")
+		ctx.Abort()
+		return
+	}
+	key := CryptoUtil.NewKey()
+	key.FilePath = ""
+	sha, err := key.Md5Sum()
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, "cannot create sha")
+		ctx.Abort()
+		return
+	}
+	if request.Md5 != sha {
+		ctx.JSON(http.StatusBadRequest, "sha is mismatch")
+		ctx.Abort()
+		return
+	}
+	ctx.JSON(http.StatusOK, entity.FileResponse{
+		ID:          request.ID,
+		Status:      0,
+		Description: "",
+	})
+	c := Redis.Client{Client: nil}
+	byt, _ := json.Marshal(&request)
+	_ = c.Set(request.Md5, string(byt))
+	f, err := File.NewFile("path", "name")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, "cannot find file")
+		ctx.Abort()
+		return
+	}
+	slice, err := f.Read()
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, "cannot split file")
+		ctx.Abort()
+		return
+	}
+	err = FileProcess.New()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, "cannot start rabbit/redis")
+		ctx.Abort()
+		return
+	}
+	go FileProcess.DoProcess(slice)
 }
 func Version(context *gin.Context) {
 	context.JSON(http.StatusOK, "Ver:1.0.0")

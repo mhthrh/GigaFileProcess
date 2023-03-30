@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mhthrh/GigaFileProcess/Entity"
-	"github.com/mhthrh/GigaFileProcess/Rabbit"
+	"github.com/go-redis/redis"
 	"github.com/mhthrh/GigaFileProcess/Validation"
+	"github.com/mhthrh/GigaFileProcess/entity"
+	"github.com/mhthrh/GigaFileProcess/rabbit"
 	"strings"
 )
 
@@ -15,15 +16,31 @@ const packages = 100_000
 var (
 	cancels  []context.CancelFunc
 	channels []chan []string
+	client   *redis.Client
+	rabbit   *Rabbit.Mq
 	i        = 1
 	j        = packages
 )
 
-type obj struct {
-	mq           *Rabbit.Mq
-	ctx          context.Context
-	damagedLines chan []string
-	lines        []string
+func New() error {
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", "", 0),
+		Password: "r.RedisConnection.Password",
+		DB:       0,
+	})
+	_, err := c.Ping().Result()
+	if err != nil {
+		return fmt.Errorf("cannot connet to redis,%w", err)
+	}
+
+	mq, err := Rabbit.New("")
+	if err != nil {
+		_ = c.Close()
+		return fmt.Errorf("canot connet to rabbitMq server,%v", err)
+	}
+	client = c
+	rabbit = mq
+	return nil
 }
 
 func DoProcess(lines []string) error {
@@ -32,17 +49,14 @@ func DoProcess(lines []string) error {
 		damagedLines := make(chan []string)
 		ctx, can := context.WithCancel(context.Background())
 		cancels = append(cancels, can)
-		mq, err := Rabbit.New("")
-		if err != nil {
-			return fmt.Errorf("canot connet to rabbitMq server,%v", err)
-		}
+
 		switch length := len(lines[i-1 : j]); {
 		case length <= j:
-			go process(lines, ctx, &damagedLines, mq)
+			go process(lines, ctx, &damagedLines)
 			channels = append(channels, damagedLines)
 			goto exitFor
 		default:
-			go process(lines[i-1:j], ctx, &damagedLines, mq)
+			go process(lines[i-1:j], ctx, &damagedLines)
 			channels = append(channels, damagedLines)
 			i = j
 			j += j
@@ -58,12 +72,12 @@ exitFor:
 	return nil
 }
 
-func process(lines []string, ctx context.Context, dam *chan []string, mq *Rabbit.Mq) {
+func process(lines []string, ctx context.Context, dam *chan []string) {
 	var damaged []string
-	var obj []Entity.FileStructure
+	var obj []entity.FileStructure
 	line := make(chan string)
 	finish := make(chan struct{})
-	_ = mq.DeclareQueue(mq.ID.String())
+	_ = rabbit.DeclareQueue(rabbit.ID.String())
 	go func() {
 		for _, l := range lines {
 			line <- l
@@ -104,7 +118,7 @@ func process(lines []string, ctx context.Context, dam *chan []string, mq *Rabbit
 				damaged = append(damaged, fmt.Sprintf("%s#%s", l, err.Error()))
 				continue
 			}
-			obj = append(obj, Entity.FileStructure{
+			obj = append(obj, entity.FileStructure{
 				ID:              newId,
 				FullName:        values[1],
 				SourceIBAN:      values[2],
@@ -117,7 +131,7 @@ func process(lines []string, ctx context.Context, dam *chan []string, mq *Rabbit
 			*dam <- damaged
 			for _, o := range obj {
 				byt, _ := json.Marshal(o)
-				mq.Produce(mq.ID.String(), string(byt))
+				rabbit.Produce(rabbit.ID.String(), string(byt))
 			}
 		}
 	}

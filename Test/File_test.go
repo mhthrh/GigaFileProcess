@@ -2,8 +2,8 @@ package Test
 
 import (
 	"fmt"
-	"github.com/mhthrh/GigaFileProcess/File"
-	"github.com/mhthrh/GigaFileProcess/Utils"
+	"github.com/mhthrh/GigaFileProcess/Utils/Random"
+	File "github.com/mhthrh/GigaFileProcess/file"
 	"github.com/stretchr/testify/require"
 	"os"
 	"strings"
@@ -21,7 +21,7 @@ func writeFile(t *testing.T) {
 	var sb strings.Builder
 
 	for i := 0; i < Count; i++ {
-		sb.WriteString(fmt.Sprintf("%d,%s,%s,%s,%s,%d\n", i, Utils.RandomString(10), Utils.RandomString(10), Utils.RandomString(10), Utils.RandomString(10), Utils.RandomInt(2, 10)))
+		sb.WriteString(fmt.Sprintf("%d,%s,%s,%s,%s,%d\n", i, Random.RandomString(10), Random.RandomString(10), Random.RandomString(10), Random.RandomString(10), Random.RandomInt(2, 10)))
 	}
 
 	_, err = file.WriteString(sb.String())

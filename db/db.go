@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/mhthrh/GigaFileProcess/Entity"
+	"github.com/mhthrh/GigaFileProcess/entity"
 	"strings"
 )
 
@@ -21,7 +21,7 @@ type Database struct {
 func New(d *sql.DB) *Database {
 	return &Database{db: d}
 }
-func (d *Database) Insert(ctx context.Context, trans []Entity.FileStructure) error {
+func (d *Database) Insert(ctx context.Context, trans []entity.FileStructure) error {
 	makePackages(trans)
 	if len(packages) < 1 {
 		return fmt.Errorf("transaction slice is empty")
@@ -33,7 +33,7 @@ func (d *Database) Insert(ctx context.Context, trans []Entity.FileStructure) err
 	return nil
 }
 
-func makePackages(trans []Entity.FileStructure) {
+func makePackages(trans []entity.FileStructure) {
 	if len(trans) < pack {
 		packages = append(packages, doProcess(trans))
 		return
@@ -42,7 +42,7 @@ func makePackages(trans []Entity.FileStructure) {
 	makePackages(trans[pack:])
 }
 
-func doProcess(trans []Entity.FileStructure) string {
+func doProcess(trans []entity.FileStructure) string {
 	var sb strings.Builder
 	for _, tran := range trans {
 		sb.WriteString(fmt.Sprintf("select %d,%s,%s,%s,%2f from dual union all", tran.ID, tran.FullName, tran.SourceIBAN, tran.DestinationIBAN, tran.Amount))

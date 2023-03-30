@@ -11,3 +11,5 @@ compose_stop:
 
 compose_down:
 	docker-compose down
+request:
+	go run ./client/main.go

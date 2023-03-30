@@ -1,4 +1,4 @@
-package Entity
+package entity
 
 type FileStructure struct {
 	ID              int64
