@@ -43,6 +43,5 @@ func (c *Client) Get(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	return Val, nil
 }

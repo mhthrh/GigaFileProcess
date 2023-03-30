@@ -1,7 +1,6 @@
 package Server
 
 import (
-	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/mhthrh/GigaFileProcess/FileProcess"
 	"github.com/mhthrh/GigaFileProcess/Utils/CryptoUtil"
@@ -9,9 +8,13 @@ import (
 	"github.com/mhthrh/GigaFileProcess/entity"
 	File "github.com/mhthrh/GigaFileProcess/file"
 	"github.com/mhthrh/GigaFileProcess/ftp"
-	Redis "github.com/mhthrh/GigaFileProcess/redis"
 	"net/http"
+	"path/filepath"
 	"time"
+)
+
+const (
+	path = "api/files"
 )
 
 func Run(ctx *gin.Context) {
@@ -37,20 +40,20 @@ func Run(ctx *gin.Context) {
 		return
 	}
 
-	client, err := ftp.New("", "", "", 0)
+	client, err := ftp.New("localhost", "ftpuser", "123456", 21)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, "ftp calling error")
 		ctx.Abort()
 		return
 	}
-	err = client.Download("", "", "")
+	err = client.Download(request.Name, request.Name, path)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, "cannot find file")
 		ctx.Abort()
 		return
 	}
 	key := CryptoUtil.NewKey()
-	key.FilePath = ""
+	key.FilePath = filepath.Join(path, request.Name)
 	sha, err := key.Md5Sum()
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, "cannot create sha")
@@ -62,15 +65,8 @@ func Run(ctx *gin.Context) {
 		ctx.Abort()
 		return
 	}
-	ctx.JSON(http.StatusOK, entity.FileResponse{
-		ID:          request.ID,
-		Status:      0,
-		Description: "",
-	})
-	c := Redis.Client{Client: nil}
-	byt, _ := json.Marshal(&request)
-	_ = c.Set(request.Md5, string(byt))
-	f, err := File.NewFile("path", "name")
+
+	f, err := File.NewFile(path, request.Name)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, "cannot find file")
 		ctx.Abort()
@@ -82,13 +78,18 @@ func Run(ctx *gin.Context) {
 		ctx.Abort()
 		return
 	}
-	err = FileProcess.New()
+	p, err := FileProcess.New()
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, "cannot start rabbit/redis")
 		ctx.Abort()
 		return
 	}
-	go FileProcess.DoProcess(slice)
+	go p.DoProcess(slice)
+	ctx.JSON(http.StatusOK, entity.FileResponse{
+		ID:          request.ID,
+		Status:      0,
+		Description: "",
+	})
 }
 func Version(context *gin.Context) {
 	context.JSON(http.StatusOK, "Ver:1.0.0")

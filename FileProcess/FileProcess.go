@@ -1,7 +1,6 @@
 package FileProcess
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/go-redis/redis"
@@ -9,79 +8,66 @@ import (
 	"github.com/mhthrh/GigaFileProcess/entity"
 	"github.com/mhthrh/GigaFileProcess/rabbit"
 	"strings"
+	"time"
 )
 
 const packages = 100_000
 
-var (
-	cancels  []context.CancelFunc
-	channels []chan []string
-	client   *redis.Client
-	rabbit   *Rabbit.Mq
-	i        = 1
-	j        = packages
-)
+type Process struct {
+	client  *redis.Client
+	rabbit  *Rabbit.Mq
+	invalid chan string
+}
 
-func New() error {
+func New() (*Process, error) {
 	c := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", "", 0),
-		Password: "r.RedisConnection.Password",
+		Addr:     fmt.Sprintf("%s:%d", "localhost", 6379),
+		Password: "",
 		DB:       0,
 	})
 	_, err := c.Ping().Result()
 	if err != nil {
-		return fmt.Errorf("cannot connet to redis,%w", err)
+		return nil, fmt.Errorf("cannot connet to redis,%w", err)
 	}
 
-	mq, err := Rabbit.New("")
+	mq, err := Rabbit.New("amqp://guest:guest@localhost:5672/")
 	if err != nil {
 		_ = c.Close()
-		return fmt.Errorf("canot connet to rabbitMq server,%v", err)
+		return nil, fmt.Errorf("canot connet to rabbitMq server,%v", err)
 	}
-	client = c
-	rabbit = mq
-	return nil
+	return &Process{
+		client:  c,
+		rabbit:  mq,
+		invalid: make(chan string),
+	}, nil
 }
 
-func DoProcess(lines []string) error {
-	var damegedList []string
-	for {
-		damagedLines := make(chan []string)
-		ctx, can := context.WithCancel(context.Background())
-		cancels = append(cancels, can)
+func (p *Process) DoProcess(lines []string) {
 
-		switch length := len(lines[i-1 : j]); {
-		case length <= j:
-			go process(lines, ctx, &damagedLines)
-			channels = append(channels, damagedLines)
-			goto exitFor
-		default:
-			go process(lines[i-1:j], ctx, &damagedLines)
-			channels = append(channels, damagedLines)
-			i = j
-			j += j
-		}
-	}
-exitFor:
+	_ = p.rabbit.DeclareQueue("rabbit.ID.String()")
 
-	for _, channel := range channels {
-		for _, s := range <-channel {
-			damegedList = append(damegedList, s)
-		}
+	if len(lines) < packages {
+		go process(lines, &p.invalid)
+		goto wait
 	}
-	return nil
+	go process(lines[0:packages], &p.invalid)
+	p.DoProcess(lines[packages:])
+wait:
+	var invalidList []string
+	for line := range p.invalid {
+		invalidList = append(invalidList, line)
+	}
 }
 
-func process(lines []string, ctx context.Context, dam *chan []string) {
-	var damaged []string
-	var obj []entity.FileStructure
+func process(lines []string, invalid *chan string) {
 	line := make(chan string)
 	finish := make(chan struct{})
-	_ = rabbit.DeclareQueue(rabbit.ID.String())
+
 	go func() {
 		for _, l := range lines {
 			line <- l
 		}
+		<-time.After(time.Millisecond * 200)
 		finish <- struct{}{}
 	}()
 
@@ -90,49 +76,45 @@ func process(lines []string, ctx context.Context, dam *chan []string) {
 		case l := <-line:
 			values := strings.Split(l, ",")
 			if len(values) != 6 {
-				damaged = append(damaged, fmt.Sprintf("%s#%s", l, "Array count is mismatch"))
+				*invalid <- fmt.Sprintf("%s#%s", l, "Array count is mismatch")
 				continue
 			}
 			newId, err := Validation.ValidaID(values[0])
 			if err != nil {
-				damaged = append(damaged, fmt.Sprintf("%s#%s", l, err.Error()))
+				*invalid <- fmt.Sprintf("%s#%s", l, err.Error())
 				continue
 			}
 			err = Validation.ValidateFullName(values[1])
 			if err != nil {
-				damaged = append(damaged, fmt.Sprintf("%s#%s", l, err.Error()))
+				*invalid <- fmt.Sprintf("%s#%s", l, err.Error())
 				continue
 			}
 			err = Validation.ValidateIban(values[2])
 			if err != nil {
-				damaged = append(damaged, fmt.Sprintf("%s#%s", l, err.Error()))
+				*invalid <- fmt.Sprintf("%s#%s", l, err.Error())
 				continue
 			}
 			err = Validation.ValidateFullName(values[3])
 			if err != nil {
-				damaged = append(damaged, fmt.Sprintf("%s#%s", l, err.Error()))
+				*invalid <- fmt.Sprintf("%s#%s", l, err.Error())
 				continue
 			}
 			amount, err := Validation.ValidateAmount(values[4])
 			if err != nil {
-				damaged = append(damaged, fmt.Sprintf("%s#%s", l, err.Error()))
+				*invalid <- fmt.Sprintf("%s#%s", l, err.Error())
 				continue
 			}
-			obj = append(obj, entity.FileStructure{
+
+			byt, _ := json.Marshal(entity.FileStructure{
 				ID:              newId,
 				FullName:        values[1],
 				SourceIBAN:      values[2],
 				DestinationIBAN: values[3],
 				Amount:          amount,
 			})
-		case <-ctx.Done():
-			return
+			_ = rabbit.Produce("rabbit.ID.String()", string(byt))
 		case <-finish:
-			*dam <- damaged
-			for _, o := range obj {
-				byt, _ := json.Marshal(o)
-				rabbit.Produce(rabbit.ID.String(), string(byt))
-			}
+			return
 		}
 	}
 
