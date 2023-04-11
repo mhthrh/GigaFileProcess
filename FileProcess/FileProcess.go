@@ -1,12 +1,9 @@
 package FileProcess
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/go-redis/redis"
 	"github.com/mhthrh/GigaFileProcess/Validation"
-	"github.com/mhthrh/GigaFileProcess/entity"
-	"github.com/mhthrh/GigaFileProcess/rabbit"
 	"strings"
 	"time"
 )
@@ -15,7 +12,6 @@ const packages = 100_000
 
 type Process struct {
 	client  *redis.Client
-	rabbit  *Rabbit.Mq
 	invalid chan string
 }
 
@@ -30,21 +26,13 @@ func New() (*Process, error) {
 		return nil, fmt.Errorf("cannot connet to redis,%w", err)
 	}
 
-	mq, err := Rabbit.New("amqp://guest:guest@localhost:5672/")
-	if err != nil {
-		_ = c.Close()
-		return nil, fmt.Errorf("canot connet to rabbitMq server,%v", err)
-	}
 	return &Process{
 		client:  c,
-		rabbit:  mq,
 		invalid: make(chan string),
 	}, nil
 }
 
 func (p *Process) DoProcess(lines []string) {
-
-	_ = p.rabbit.DeclareQueue("rabbit.ID.String()")
 
 	if len(lines) < packages {
 		go process(lines, &p.invalid)
@@ -79,7 +67,7 @@ func process(lines []string, invalid *chan string) {
 				*invalid <- fmt.Sprintf("%s#%s", l, "Array count is mismatch")
 				continue
 			}
-			newId, err := Validation.ValidaID(values[0])
+			_, err := Validation.ValidaID(values[0])
 			if err != nil {
 				*invalid <- fmt.Sprintf("%s#%s", l, err.Error())
 				continue
@@ -99,20 +87,20 @@ func process(lines []string, invalid *chan string) {
 				*invalid <- fmt.Sprintf("%s#%s", l, err.Error())
 				continue
 			}
-			amount, err := Validation.ValidateAmount(values[4])
+			//amount, err := Validation.ValidateAmount(values[4])
+			_, err = Validation.ValidateAmount(values[4])
 			if err != nil {
 				*invalid <- fmt.Sprintf("%s#%s", l, err.Error())
 				continue
 			}
 
-			byt, _ := json.Marshal(entity.FileStructure{
-				ID:              newId,
-				FullName:        values[1],
-				SourceIBAN:      values[2],
-				DestinationIBAN: values[3],
-				Amount:          amount,
-			})
-			_ = rabbit.Produce("rabbit.ID.String()", string(byt))
+			//byt, _ := json.Marshal(entity.FileStructure{
+			//	ID:              newId,
+			//	FullName:        values[1],
+			//	SourceIBAN:      values[2],
+			//	DestinationIBAN: values[3],
+			//	Amount:          amount,
+			//})
 		case <-finish:
 			return
 		}
